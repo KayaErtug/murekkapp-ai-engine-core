@@ -1,0 +1,10 @@
+﻿node_modules/
+.env
+logs/
+*.log
+.vscode/
+.autogit/
+.wwebjs_auth/
+.wwebjs_cache/
+
+tts-key.json
