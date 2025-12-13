@@ -8,3 +8,18 @@ logs/
 .wwebjs_cache/
 
 tts-key.json
+
+node_modules/
+dist/
+build/
+
+logs/
+*.log
+
+tmp/
+temp/
+cache/
+coverage/
+
+.env
+.env.*

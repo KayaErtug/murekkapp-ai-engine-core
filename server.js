@@ -11,6 +11,10 @@ import express from "express";
 import cors from "cors";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "redis";
+import { cleanupOldFiles } from "./utils/cleanup";
+
+cleanupOldFiles(process.cwd());
+
 
 const app = express();
 const port = process.env.PORT || 4001;
