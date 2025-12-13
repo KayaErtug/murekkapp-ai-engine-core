@@ -14,9 +14,24 @@ import { createClient } from "redis";
 
 const app = express();
 const port = process.env.PORT || 4001;
+const startedAt = Date.now();
 
 app.use(cors({ origin: "*" }));
 app.use(express.json());
+
+//------------------------------------------------------
+// HEALTH CHECK (RENDER / UPTIME / WARM-UP)
+//------------------------------------------------------
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "MurekkAPP AI Engine",
+    status: "running",
+    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+    redis: redisReady ? "connected" : "not_connected",
+    timestamp: Date.now(),
+  });
+});
 
 //------------------------------------------------------
 // GEMINI
