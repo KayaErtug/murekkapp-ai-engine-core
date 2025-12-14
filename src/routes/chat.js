@@ -10,7 +10,7 @@ const router = express.Router();
 // CHAT ENDPOINT — UI HİÇ DEĞİŞMEZ
 //------------------------------------------------------
 router.post("/chat", async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { message, sessionId, sector } = req.body;
 
   if (!message || !sessionId) {
     return res.status(400).json({
