@@ -28,8 +28,17 @@ function formatHistory(history) {
  * - A/B varyant
  * eklemek için genişletilecek
  */
-export function buildPromptText({ history, userMessage }) {
-  const historyText = formatHistory(history);
+export function buildPromptText({ history, userMessage, sector }) {
+  const systemPrompt = getPrompt({ sector });
+
+  const historyText =
+    history
+      ?.map((m) =>
+        m.role === "assistant"
+          ? `Lina: ${m.content}`
+          : `Kullanıcı: ${m.content}`
+      )
+      .join("\n") || "Yok.";
 
   return `
 ${systemPrompt}
