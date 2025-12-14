@@ -1,6 +1,7 @@
 // /src/ai/buildPrompt.js
 
-import systemPrompt from "./prompts/lina.system.v2.js";
+import { getPrompt } from "./prompts/index.js";
+
 
 /**
  * History'yi insan-okur formatına çevirir
