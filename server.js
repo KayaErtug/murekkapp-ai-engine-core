@@ -6,6 +6,9 @@
 
 import dotenv from "dotenv";
 dotenv.config();
+console.log("ENV CHECK → OPENAI_API_KEY =", process.env.OPENAI_API_KEY);
+
+
 
 import express from "express";
 import cors from "cors";
