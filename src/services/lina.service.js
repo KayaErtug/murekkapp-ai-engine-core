@@ -13,12 +13,13 @@ const model = genAI.getGenerativeModel({
 });
 
 //------------------------------------------------------
-// LINA TALK
+// LINA TALK — SECTOR DESTEKLİ
 //------------------------------------------------------
-export async function talkToLina({ history, message }) {
+export async function talkToLina({ history, message, sector }) {
   const promptText = buildPromptText({
     history,
     userMessage: message,
+    sector,
   });
 
   const result = await model.generateContent({
