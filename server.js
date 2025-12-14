@@ -4,11 +4,13 @@
 // Lina v2.0 — Premium Behavior + Few-Shot + Memory
 //------------------------------------------------------
 
-import dotenv from "dotenv";
-dotenv.config();
+// 🔴 ESM İÇİN DOĞRU ENV LOAD (ÇOK KRİTİK)
+import "dotenv/config";
+
+// DEBUG (şimdilik kalsın)
 console.log("ENV CHECK → OPENAI_API_KEY =", process.env.OPENAI_API_KEY);
 
-
+//------------------------------------------------------
 
 import express from "express";
 import cors from "cors";
