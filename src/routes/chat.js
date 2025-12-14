@@ -7,7 +7,7 @@ import { talkToLina } from "../services/lina.service.js";
 const router = express.Router();
 
 //------------------------------------------------------
-// CHAT ENDPOINT — UI HİÇ DEĞİŞMEZ
+// CHAT ENDPOINT — SECTOR DESTEKLİ (GERİYE DÖNÜK UYUMLU)
 //------------------------------------------------------
 router.post("/chat", async (req, res) => {
   const { message, sessionId, sector } = req.body;
@@ -22,10 +22,11 @@ router.post("/chat", async (req, res) => {
     // 1) Hafızayı al
     const history = await getHistory(sessionId);
 
-    // 2) Lina’ya sor
+    // 2) Lina’ya sor (sector opsiyonel)
     const reply = await talkToLina({
       history,
       message,
+      sector,
     });
 
     // 3) Hafızaya kaydet
