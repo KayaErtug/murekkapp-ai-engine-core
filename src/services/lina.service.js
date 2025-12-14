@@ -1,31 +1,31 @@
 // /src/services/lina.service.js
 //------------------------------------------------------
-// LINA SERVICE — MULTI MODEL READY (v1)
-// Primary: OpenAI
-// Fallback: Gemini
+// LINA SERVICE — MULTI MODEL (STABLE)
+// Primary : OpenAI
+// Fallback: Gemini (gemini-1.0-pro)
 //------------------------------------------------------
 
 import { buildPromptText } from "../ai/buildPrompt.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 //------------------------------------------------------
-// MODEL CLIENTS
+// CLIENTS
 //------------------------------------------------------
 
-// OpenAI (PRIMARY)
+// OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Gemini (FALLBACK)
+// Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-1.0-pro",
 });
 
 //------------------------------------------------------
-// ACTIVE MODEL (ileride DB / panelden gelir)
+// ACTIVE MODEL (ileride panel/DB)
 //------------------------------------------------------
 const ACTIVE_MODEL = process.env.LINA_ACTIVE_MODEL || "openai";
 // openai | gemini
@@ -47,10 +47,7 @@ async function talkWithOpenAI(promptText) {
 // GEMINI CALL
 //------------------------------------------------------
 async function talkWithGemini(promptText) {
-  const result = await geminiModel.generateContent({
-    contents: [{ role: "user", parts: [{ text: promptText }] }],
-  });
-
+  const result = await geminiModel.generateContent(promptText);
   return result.response.text().trim();
 }
 
@@ -64,7 +61,7 @@ export async function talkToLina({ history, message, sector }) {
     sector,
   });
 
-  // 1️⃣ PRIMARY MODEL
+  // 1️⃣ PRIMARY
   try {
     if (ACTIVE_MODEL === "openai") {
       const reply = await talkWithOpenAI(promptText);
