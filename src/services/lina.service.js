@@ -58,17 +58,23 @@ export async function talkToLina({ history, message, sector }) {
   // 1️⃣ PRIMARY → OPENAI
   try {
     const reply = await talkWithOpenAI(promptText);
-    if (reply) return reply;
+    if (reply) {
+      console.log("🧠 Lina response via: OPENAI");
+      return reply;
+    }
   } catch (err) {
-    console.warn("⚠️ OpenAI failed:", err.message);
+    console.warn("⚠️ OpenAI failed, trying Gemini:", err.message);
   }
 
   // 2️⃣ FALLBACK → GEMINI
   try {
     const reply = await talkWithGemini(promptText);
-    if (reply) return reply;
+    if (reply) {
+      console.log("🧠 Lina response via: GEMINI");
+      return reply;
+    }
   } catch (err) {
-    console.error("❌ Gemini fallback failed:", err.message);
+    console.error("❌ Gemini failed:", err.message);
   }
 
   throw new Error("Hiçbir AI modeli cevap üretemedi");
