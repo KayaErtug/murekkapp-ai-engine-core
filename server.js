@@ -7,8 +7,7 @@
 // 🔴 ESM İÇİN DOĞRU ENV LOAD (ÇOK KRİTİK)
 import "dotenv/config";
 
-// DEBUG (şimdilik kalsın)
-console.log("ENV CHECK → OPENAI_API_KEY =", process.env.OPENAI_API_KEY);
+
 
 //------------------------------------------------------
 
