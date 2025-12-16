@@ -7,6 +7,9 @@
 // 🔴 ESM İÇİN DOĞRU ENV LOAD (ÇOK KRİTİK)
 import "dotenv/config";
 
+// ✅ YENİ: WhatsApp Botunu Başlat
+import "./whatsapp-bot.js";
+
 
 
 //------------------------------------------------------
