@@ -30,6 +30,9 @@ const GOOGLE_KEYFILE = process.env.GOOGLE_TTS_KEY;
 const VOICE_RATE_LIMIT_SECONDS = 30;
 const DEFAULT_CUSTOMER_ID = "demo-logistic"; 
 
+// 📱 SENİN NUMARAN (Pairing Code İçin)
+const MY_PHONE_NUMBER = "902589110718"; 
+
 //--------------------------------------------------------------
 // Google Clients
 //--------------------------------------------------------------
@@ -59,7 +62,7 @@ async function isRateLimited(sessionId) {
 }
 
 //--------------------------------------------------------------
-// WhatsApp Client
+// WhatsApp Client & PAIRING CODE MANTIĞI
 //--------------------------------------------------------------
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
@@ -69,9 +72,25 @@ const client = new Client({
   },
 });
 
-client.on("qr", (qr) => {
-  console.log("⚠️ WHATSAPP QR KODU (Terminalden okut):");
-  qrcode.generate(qr, { small: true });
+let isPairingRequested = false;
+
+client.on("qr", async (qr) => {
+  // QR geldiğinde QR'ı boşverip EŞLEŞME KODU istiyoruz
+  if (!isPairingRequested) {
+    isPairingRequested = true;
+    console.log(`⏳ ${MY_PHONE_NUMBER} numarası için eşleşme kodu isteniyor...`);
+    
+    try {
+      const code = await client.requestPairingCode(MY_PHONE_NUMBER);
+      console.log("\n========================================");
+      console.log("🔑 EŞLEŞME KODUNUZ: " + code);
+      console.log("========================================");
+      console.log("👉 WhatsApp > Ayarlar > Bağlı Cihazlar > Cihaz Bağla > 'Telefon numarası ile bağla' seçeneğine tıkla ve bu kodu gir.\n");
+    } catch (err) {
+      console.error("❌ Kod alma hatası:", err);
+      isPairingRequested = false; // Hata olursa tekrar denesin
+    }
+  }
 });
 
 client.on("ready", () => console.log("✅ Lina WhatsApp Bot Aktif!"));
