@@ -1,7 +1,6 @@
 // /murekkapp-backend-clean/whatsapp-bot.js
 //--------------------------------------------------------------
-// MurekkAPP WhatsApp Lina v2.0
-// Capabilities: Text (Chat), Voice (STT+TTS), Call Handling
+// MurekkAPP WhatsApp Lina v2.1 (Production Ready)
 //--------------------------------------------------------------
 
 import dotenv from "dotenv";
@@ -17,6 +16,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 
+// ✅ YENİ: FFmpeg'i statik yoldan al (Render için garanti çözüm)
+import ffmpegPath from "ffmpeg-static";
+
 import textToSpeech from "@google-cloud/text-to-speech";
 import speech from "@google-cloud/speech";
 import { createClient } from "redis";
@@ -28,14 +30,7 @@ const __dirname = path.dirname(__filename);
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4001";
 const GOOGLE_KEYFILE = process.env.GOOGLE_TTS_KEY;
 
-// ⚠️ ÖNEMLİ: Render/Linux sunucuda 'ffmpeg', Windows'ta 'C:/ffmpeg/bin/ffmpeg.exe'
-// Otomatik algılama ekledim:
-const isWin = process.platform === "win32";
-const FFMPEG_PATH = isWin ? "C:/ffmpeg/bin/ffmpeg.exe" : "ffmpeg";
-
 const VOICE_RATE_LIMIT_SECONDS = 30;
-
-// Varsayılan müşteri ID (SaaS yapısına göre dinamikleştirilebilir)
 const DEFAULT_CUSTOMER_ID = "demo-logistic"; 
 
 //--------------------------------------------------------------
@@ -58,15 +53,6 @@ if (process.env.REDIS_URL) {
   })();
 }
 
-async function saveVoiceMeta(sessionId, data) {
-  if (!redis || !redisReady) return;
-  await redis.lPush(
-    `voice_meta:${sessionId}`,
-    JSON.stringify({ ...data, at: new Date().toISOString() })
-  );
-  await redis.lTrim(`voice_meta:${sessionId}`, 0, 24);
-}
-
 async function isRateLimited(sessionId) {
   if (!redis || !redisReady) return false;
   const key = `voice_rl:${sessionId}`;
@@ -87,7 +73,7 @@ const client = new Client({
 });
 
 client.on("qr", (qr) => {
-  console.log("⚠️ QR KODU OLUŞTU (Scan Required):");
+  console.log("⚠️ WHATSAPP QR KODU (Terminalden okut):");
   qrcode.generate(qr, { small: true });
 });
 
@@ -99,7 +85,7 @@ client.on("ready", () => console.log("✅ Lina WhatsApp Bot Aktif!"));
 async function generateTTS(text, mp3Path) {
   const [res] = await ttsClient.synthesizeSpeech({
     input: { text },
-    voice: { languageCode: "tr-TR", name: "tr-TR-Wavenet-D" }, // Ses tonunu buradan değiştirebilirsin
+    voice: { languageCode: "tr-TR", name: "tr-TR-Wavenet-D" },
     audioConfig: { audioEncoding: "MP3" },
   });
   await fs.promises.writeFile(mp3Path, res.audioContent, "binary");
@@ -107,7 +93,8 @@ async function generateTTS(text, mp3Path) {
 
 async function convertToWav(input, wav) {
   return new Promise((resolve, reject) => {
-    const p = spawn(FFMPEG_PATH, ["-y", "-i", input, "-ac", "1", "-ar", "16000", wav]);
+    // ✅ GÜNCELLEME: ffmpegPath değişkenini kullanıyoruz
+    const p = spawn(ffmpegPath, ["-y", "-i", input, "-ac", "1", "-ar", "16000", wav]);
     p.on("close", (c) => (c === 0 ? resolve() : reject(new Error("FFmpeg error"))));
     p.on("error", (err) => reject(err));
   });
@@ -123,88 +110,58 @@ async function speechToText(wav) {
 }
 
 //--------------------------------------------------------------
-// 🔥 INTENT CLASSIFIER (Optional)
-//--------------------------------------------------------------
-async function classifyIntent(text) {
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/intent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) return { intent: "other", confidence: 0 };
-    return await res.json();
-  } catch {
-    return { intent: "other", confidence: 0 };
-  }
-}
-
-//--------------------------------------------------------------
-// 📞 ARAMA YÖNETİMİ (CALL HANDLER)
+// 📞 ARAMA YÖNETİMİ
 //--------------------------------------------------------------
 client.on('call', async (call) => {
   console.log('📞 Gelen arama:', call.from);
-  // WhatsApp botları aramayı sesli yanıtlayamaz, reddedip mesaj atıyoruz.
   try {
     await call.reject();
-    await client.sendMessage(call.from, "📞 Aramaları şu an açamıyorum. Bana **yazabilir** veya **sesli mesaj** gönderebilirsin. Hızlıca döneceğim! 👋");
-  } catch (err) {
-    console.error("Call reject error:", err);
-  }
+    await client.sendMessage(call.from, "📞 Aramaları şu an açamıyorum. Bana **yazabilir** veya **sesli mesaj** gönderebilirsin. 👋");
+  } catch (err) {}
 });
 
 //--------------------------------------------------------------
-// 💬 MESAJ YÖNETİMİ (TEXT & VOICE)
+// 💬 MESAJ YÖNETİMİ
 //--------------------------------------------------------------
 client.on("message", async (msg) => {
   const from = msg.from;
-
-  // Sadece Text, Audio ve PTT (Bas-Konuş) kabul et
   if (msg.type !== "chat" && msg.type !== "audio" && msg.type !== "ptt") return;
-  
-  // Grup mesajlarını engellemek istersen:
   if (from.includes("@g.us")) return;
 
-  // Rate Limit Kontrolü (Spam koruma)
-  // Text için daha esnek, ses için katı olabilir. Şimdilik sese koyduk.
   if ((msg.type === "audio" || msg.type === "ptt") && await isRateLimited(from)) {
     await msg.reply("✋ Biraz yavaşlayalım, önceki mesajını işliyorum...");
     return;
   }
 
-  // 1️⃣ YAZILI MESAJ (TEXT)
+  // 1️⃣ YAZILI MESAJ
   if (msg.type === "chat") {
-    console.log(`📩 Mesaj (${from}): ${msg.body}`);
-    // "Yazıyor..." efekti gönder (Simülasyon)
+    console.log(`📩 Chat (${from}): ${msg.body}`);
     const chat = await msg.getChat();
     await chat.sendStateTyping();
 
     try {
-      // Backend'e sor
       const replyRes = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: msg.body,
-          sessionId: from, // Telefon numarasını Session ID yapıyoruz
+          sessionId: from,
           customerId: DEFAULT_CUSTOMER_ID
         }),
       });
 
       const data = await replyRes.json();
-      const replyText = data.reply || "Üzgünüm, şu an cevap veremiyorum.";
-
-      await msg.reply(replyText);
+      await msg.reply(data.reply || "Cevap yok.");
     } catch (err) {
-      console.error("Text Chat Error:", err);
+      console.error("Chat Error:", err);
     } finally {
       await chat.clearState();
     }
   }
 
-  // 2️⃣ SESLİ MESAJ (VOICE)
+  // 2️⃣ SESLİ MESAJ
   else if (msg.type === "audio" || msg.type === "ptt") {
-    console.log(`🎤 Sesli Mesaj (${from})`);
+    console.log(`🎤 Voice (${from})`);
     await msg.reply("🎧 Dinliyorum...");
 
     const media = await msg.downloadMedia();
@@ -216,20 +173,15 @@ client.on("message", async (msg) => {
     const outMp3 = path.join(__dirname, `out-${stamp}.mp3`);
 
     try {
-      // Dosyayı kaydet ve dönüştür
       await fs.promises.writeFile(inFile, Buffer.from(media.data, "base64"));
       await convertToWav(inFile, wavFile);
-
-      // STT (Sesi Yazıya Çevir)
       const transcript = await speechToText(wavFile);
-      console.log(`📝 Transcript: ${transcript}`);
-
+      
       if (!transcript.trim()) {
-        await client.sendMessage(from, "Sesini tam duyamadım, tekrar eder misin?");
+        await client.sendMessage(from, "Sesini tam duyamadım.");
         return;
       }
 
-      // Backend'e gönder
       const replyRes = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,26 +193,18 @@ client.on("message", async (msg) => {
       });
 
       const { reply } = await replyRes.json();
-      console.log(`🤖 AI Cevabı: ${reply}`);
-
-      // TTS (Yazıyı Sese Çevir)
       await generateTTS(reply, outMp3);
       
-      // Ses dosyasını gönder
       const audio = fs.readFileSync(outMp3).toString("base64");
       await client.sendMessage(from, new MessageMedia("audio/mpeg", audio));
 
     } catch (err) {
-      console.error("Voice process error:", err);
-      await client.sendMessage(from, "Sesini işlerken bir sorun oluştu.");
+      console.error("Voice Error:", err);
+      await client.sendMessage(from, "Hata oluştu.");
     } finally {
-      // Temizlik
-      [inFile, wavFile, outMp3].forEach(f => {
-        if (fs.existsSync(f)) fs.unlinkSync(f);
-      });
+      [inFile, wavFile, outMp3].forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
     }
   }
 });
 
-//--------------------------------------------------------------
 client.initialize();
