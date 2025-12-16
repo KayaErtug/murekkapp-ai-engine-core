@@ -1,7 +1,4 @@
 // /murekkapp-backend-clean/whatsapp-bot.js
-//--------------------------------------------------------------
-// MurekkAPP WhatsApp Lina v2.1 (Production Ready)
-//--------------------------------------------------------------
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -16,7 +13,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 
-// ✅ YENİ: FFmpeg'i statik yoldan al (Render için garanti çözüm)
+// ✅ RENDER İÇİN KRİTİK: FFmpeg yolunu paket üzerinden alıyoruz
 import ffmpegPath from "ffmpeg-static";
 
 import textToSpeech from "@google-cloud/text-to-speech";
@@ -34,7 +31,7 @@ const VOICE_RATE_LIMIT_SECONDS = 30;
 const DEFAULT_CUSTOMER_ID = "demo-logistic"; 
 
 //--------------------------------------------------------------
-// Google clients
+// Google Clients
 //--------------------------------------------------------------
 const ttsClient = new textToSpeech.TextToSpeechClient({ keyFilename: GOOGLE_KEYFILE });
 const sttClient = new speech.SpeechClient({ keyFilename: GOOGLE_KEYFILE });
@@ -93,7 +90,7 @@ async function generateTTS(text, mp3Path) {
 
 async function convertToWav(input, wav) {
   return new Promise((resolve, reject) => {
-    // ✅ GÜNCELLEME: ffmpegPath değişkenini kullanıyoruz
+    // ✅ GÜNCEL: ffmpegPath kullanılıyor
     const p = spawn(ffmpegPath, ["-y", "-i", input, "-ac", "1", "-ar", "16000", wav]);
     p.on("close", (c) => (c === 0 ? resolve() : reject(new Error("FFmpeg error"))));
     p.on("error", (err) => reject(err));
@@ -110,7 +107,7 @@ async function speechToText(wav) {
 }
 
 //--------------------------------------------------------------
-// 📞 ARAMA YÖNETİMİ
+// 📞 ARAMA (Call)
 //--------------------------------------------------------------
 client.on('call', async (call) => {
   console.log('📞 Gelen arama:', call.from);
@@ -121,7 +118,7 @@ client.on('call', async (call) => {
 });
 
 //--------------------------------------------------------------
-// 💬 MESAJ YÖNETİMİ
+// 💬 MESAJ (Text & Voice)
 //--------------------------------------------------------------
 client.on("message", async (msg) => {
   const from = msg.from;

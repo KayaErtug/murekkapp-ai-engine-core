@@ -4,15 +4,10 @@
 // Lina v2.0 — Premium Behavior + Few-Shot + Memory
 //------------------------------------------------------
 
-// 🔴 ESM İÇİN DOĞRU ENV LOAD (ÇOK KRİTİK)
 import "dotenv/config";
 
-// ✅ YENİ: WhatsApp Botunu Başlat
+// ✅ WHATSAPP BOTUNU BAŞLAT
 import "./whatsapp-bot.js";
-
-
-
-//------------------------------------------------------
 
 import express from "express";
 import cors from "cors";
@@ -24,7 +19,7 @@ import { isRedisReady } from "./src/services/memory.service.js";
 //------------------------------------------------------
 // BOOTSTRAP
 //------------------------------------------------------
-cleanupOldFiles(process.cwd());
+// cleanupOldFiles(process.cwd()); // Render'da bazen hata verebilir, gerekirse kapatılabilir.
 
 const app = express();
 const port = process.env.PORT || 4001;
@@ -34,7 +29,7 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 //------------------------------------------------------
-// HEALTH CHECK (RENDER / UPTIME / WARM-UP)
+// HEALTH CHECK
 //------------------------------------------------------
 app.get("/api/health", (req, res) => {
   res.json({
