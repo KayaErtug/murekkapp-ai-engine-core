@@ -24,7 +24,7 @@
     "qrcode-terminal": "^0.12.0",
     "redis": "^5.10.0",
     "util": "^0.12.5",
-    "whatsapp-web.js": "github:wwebjs/wwebjs#main"
+    "whatsapp-web.js": "git+https://github.com/wwebjs/wwebjs.git"
   },
   "engines": {
     "node": ">=18.0.0"
