@@ -21,10 +21,8 @@
     "fs-extra": "^11.2.0",
     "node-fetch": "^3.3.2",
     "openai": "^4.76.0",
-    "qrcode-terminal": "^0.12.0",
     "redis": "^5.10.0",
-    "util": "^0.12.5",
-    "whatsapp-web.js": "https://github.com/juliansteenbakker/whatsapp-web.js/tarball/master"
+    "util": "^0.12.5"
   },
   "engines": {
     "node": ">=18.0.0"
