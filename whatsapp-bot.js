@@ -1,162 +1,135 @@
 // /murekkapp-backend-clean/whatsapp-bot.js
-// V5: Auto-Clean Mode (Bozuk oturumları siler ve sıfırdan başlar)
+// V6: Official WhatsApp Cloud API Integration (Router Mode)
+// Murekkapp.com Canlı Uyumlu
 
+import express from "express";
+import fetch from "node-fetch";
 import dotenv from "dotenv";
+
 dotenv.config();
 
-// Bozuk oturumları silmek için fs modülü
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { spawn } from "child_process";
+const router = express.Router();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 🛑 KRİTİK TEMİZLİK: Başlarken eski auth dosyasını sil
-const AUTH_PATH = path.join(process.cwd(), ".wwebjs_auth");
-if (fs.existsSync(AUTH_PATH)) {
-  console.log("🧹 Temizlik yapılıyor: Eski oturum dosyaları siliniyor...");
-  try {
-    fs.rmSync(AUTH_PATH, { recursive: true, force: true });
-    console.log("✅ Temizlik tamamlandı. Sıfırdan başlanıyor.");
-  } catch (e) {
-    console.error("⚠️ Temizlik hatası (önemsiz):", e.message);
-  }
-}
-
-import pkg from "whatsapp-web.js";
-const { Client, LocalAuth, MessageMedia } = pkg;
-import fetch from "node-fetch";
-import ffmpegPath from "ffmpeg-static";
-import textToSpeech from "@google-cloud/text-to-speech";
-import speech from "@google-cloud/speech";
-import { createClient } from "redis";
-
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4001";
-const GOOGLE_KEYFILE = process.env.GOOGLE_TTS_KEY;
+// -----------------------------------------------------------------------------
+// KONFİGÜRASYON
+// -----------------------------------------------------------------------------
+const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID; 
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN; 
 const DEFAULT_CUSTOMER_ID = "demo-logistic"; 
-const MY_PHONE_NUMBER = "902589110718"; 
 
-//--------------------------------------------------------------
-// Setup
-//--------------------------------------------------------------
-const ttsClient = new textToSpeech.TextToSpeechClient({ keyFilename: GOOGLE_KEYFILE });
-const sttClient = new speech.SpeechClient({ keyFilename: GOOGLE_KEYFILE });
-let redis = null;
+// Backend URL: Canlıdaysa murekkapp.com, değilse localhost
+// .env dosyasında BACKEND_URL=https://murekkapp.com olarak ayarlanmalı
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4001";
 
-if (process.env.REDIS_URL) {
-  redis = createClient({ url: process.env.REDIS_URL });
-  redis.on("error", () => {});
-  (async () => { try { await redis.connect(); } catch {} })();
+// -----------------------------------------------------------------------------
+// YARDIMCI FONKSİYONLAR
+// -----------------------------------------------------------------------------
+
+// Meta'ya Mesaj Gönderme
+async function sendWhatsAppMessage(to, text) {
+  if (!text) return;
+  try {
+    const url = `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: to,
+      type: "text",
+      text: { preview_url: false, body: text }
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    // Hata kontrolü
+    const data = await response.json();
+    if (data.error) console.error("❌ WhatsApp API Hatası:", data.error);
+  } catch (err) {
+    console.error("❌ Mesaj Gönderme Hatası:", err);
+  }
 }
 
-//--------------------------------------------------------------
-// Client Init
-//--------------------------------------------------------------
-const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }), // Yeni klasör oluşturacak
-  puppeteer: { 
-    headless: true, 
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] 
-  },
-});
+// Yapay Zekadan Cevap Alma
+async function getAIResponse(userMessage, senderId) {
+  try {
+    // Kendi sunucumuzdaki /api/chat endpoint'ine istek atıyoruz
+    // Canlı ortamda https://murekkapp.com/api/chat adresine gider
+    const res = await fetch(`${BACKEND_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        message: userMessage, 
+        sessionId: `wa_${senderId}`, 
+        customerId: DEFAULT_CUSTOMER_ID 
+      }),
+    });
+    
+    const data = await res.json();
+    return data.reply;
+  } catch (error) {
+    console.error("AI API Bağlantı Hatası:", error);
+    return "Şu an sistemlerimde bir bakım var, lütfen daha sonra tekrar yaz. 🤖";
+  }
+}
 
-let isPairingRequested = false;
+// -----------------------------------------------------------------------------
+// WEBHOOK ROUTES
+// -----------------------------------------------------------------------------
 
-client.on("qr", async () => {
-  if (!isPairingRequested) {
-    isPairingRequested = true;
-    console.log(`\n⏳ ${MY_PHONE_NUMBER} için Eşleşme Kodu hazırlanıyor...`);
-    try {
-      await new Promise(r => setTimeout(r, 5000)); // 5sn bekle, tarayıcı kendine gelsin
-      const code = await client.requestPairingCode(MY_PHONE_NUMBER);
-      console.log("\n========================================");
-      console.log("🔑 EŞLEŞME KODUNUZ: " + code);
-      console.log("========================================");
-    } catch (err) {
-      console.error("❌ Kod alma hatası:", err.message);
-      isPairingRequested = false;
+// 1. Doğrulama (Meta'nın token kontrolü)
+router.get("/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ WhatsApp Webhook Doğrulandı!");
+      res.status(200).send(challenge);
+    } else {
+      res.sendStatus(403);
     }
+  } else {
+    res.sendStatus(400);
   }
 });
 
-client.on("ready", () => console.log("✅ Lina WhatsApp Bot Aktif!"));
+// 2. Mesaj Karşılama
+router.post("/webhook", async (req, res) => {
+  const body = req.body;
 
-//--------------------------------------------------------------
-// Helpers & Handlers
-//--------------------------------------------------------------
-async function generateTTS(text, mp3Path) {
-  const [res] = await ttsClient.synthesizeSpeech({
-    input: { text },
-    voice: { languageCode: "tr-TR", name: "tr-TR-Wavenet-D" },
-    audioConfig: { audioEncoding: "MP3" },
-  });
-  await fs.promises.writeFile(mp3Path, res.audioContent, "binary");
-}
-
-async function convertToWav(input, wav) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(ffmpegPath, ["-y", "-i", input, "-ac", "1", "-ar", "16000", wav]);
-    p.on("close", (c) => (c === 0 ? resolve() : reject(new Error("FFmpeg error"))));
-    p.on("error", (err) => reject(err));
-  });
-}
-
-async function speechToText(wav) {
-  const audioBytes = (await fs.promises.readFile(wav)).toString("base64");
-  const [res] = await sttClient.recognize({
-    audio: { content: audioBytes },
-    config: { encoding: "LINEAR16", sampleRateHertz: 16000, languageCode: "tr-TR" },
-  });
-  return res.results?.map(r => r.alternatives[0].transcript).join(" ") || "";
-}
-
-client.on('call', async (call) => {
-  try { await call.reject(); await client.sendMessage(call.from, "📞 Aramaları açamıyorum, bana yazabilirsin."); } catch {}
-});
-
-client.on("message", async (msg) => {
-  const from = msg.from;
-  if (from.includes("@g.us")) return; // Grupları yoksay
-
-  // TEXT
-  if (msg.type === "chat") {
-    const chat = await msg.getChat(); await chat.sendStateTyping();
-    try {
-      const replyRes = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg.body, sessionId: from, customerId: DEFAULT_CUSTOMER_ID }),
-      });
-      const data = await replyRes.json(); await msg.reply(data.reply || "...");
-    } catch (err) { console.error(err); } finally { await chat.clearState(); }
-  }
-  // VOICE
-  else if (msg.type === "audio" || msg.type === "ptt") {
-    await msg.reply("🎧 Dinliyorum...");
-    const media = await msg.downloadMedia(); if (!media?.data) return;
-    const stamp = Date.now();
-    const inFile = path.join(__dirname, `in-${stamp}.bin`);
-    const wavFile = path.join(__dirname, `in-${stamp}.wav`);
-    const outMp3 = path.join(__dirname, `out-${stamp}.mp3`);
-    try {
-      await fs.promises.writeFile(inFile, Buffer.from(media.data, "base64"));
-      await convertToWav(inFile, wavFile);
-      const transcript = await speechToText(wavFile);
-      if (!transcript.trim()) { await client.sendMessage(from, "Sesini tam duyamadım."); return; }
+  if (body.object) {
+    if (
+      body.entry &&
+      body.entry[0].changes &&
+      body.entry[0].changes[0].value.messages &&
+      body.entry[0].changes[0].value.messages[0]
+    ) {
+      const msgObject = body.entry[0].changes[0].value.messages[0];
+      const senderId = msgObject.from;
+      const msgType = msgObject.type;
       
-      const replyRes = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: transcript, sessionId: from, customerId: DEFAULT_CUSTOMER_ID }),
-      });
-      const { reply } = await replyRes.json();
-      await generateTTS(reply, outMp3);
-      const audio = fs.readFileSync(outMp3).toString("base64");
-      await client.sendMessage(from, new MessageMedia("audio/mpeg", audio));
-    } catch (err) { console.error(err); await client.sendMessage(from, "Hata oluştu."); }
-    finally { [inFile, wavFile, outMp3].forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); }); }
+      console.log(`📩 WhatsApp Mesajı (${senderId}):`, msgType);
+
+      if (msgType === "text") {
+        const userText = msgObject.text.body;
+        // AI'ya sor ve cevapla
+        const aiReply = await getAIResponse(userText, senderId);
+        await sendWhatsAppMessage(senderId, aiReply);
+      } else {
+        await sendWhatsAppMessage(senderId, "Şimdilik sadece metin mesajlarını anlayabiliyorum. 📝");
+      }
+    }
+    res.sendStatus(200);
+  } else {
+    res.sendStatus(404);
   }
 });
 
-console.log("🚀 LINA V5 BAŞLIYOR... (AUTO-CLEAN MODE)");
-client.initialize();
+export default router;
